@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+
 ''' 
 批量给图片增加时间水印的Python脚本程序【目前测试为Mac OS X下的jpeg文件】。
 遍历指定目录的照片文件，根据拍照时间给照片在右下角添加时间和地点的水印。
@@ -14,8 +17,6 @@
 watermark 参考 https://blog.csdn.net/weixin_30561177/article/details/97609897 
 orientation 参考 https://blog.csdn.net/mizhenpeng/article/details/82794112
 '''
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-  
 import os
 import stat
 import time
@@ -24,16 +25,17 @@ import exifread
 from PIL import Image, ImageDraw, ImageFont, ExifTags
 import requests
 import json
+import sys
 
 '=================分割线==================='
 # 创建文件夹
-def mymkdir(path):
+def my_mkdir(path):
     if not os.path.exists(path):
         os.mkdir(path)
 
 # 判断是否是支持的文件类型
 SUFFIX_FILTER = ['.jpg','.png','.mpg','.mp4','.thm','.bmp','.jpeg','.avi','.mov'] # 仅测试了jpeg，jpg
-def isTargetedFileType(filename):
+def is_targeted_file_type(filename):
     '根据文件扩展名，判断是否是需要处理的文件类型；仅支持x.x格式'
     filename_nopath = os.path.basename(filename)
     f,e = os.path.splitext(filename_nopath)
@@ -50,7 +52,7 @@ def get_new_filename(filename):
 '=================分割线==================='
 
 '=================begin{得到照片的拍摄时间}==================='
-def getPhotoTime(filename):
+def get_photo_time(filename):
     '''得到照片的拍照时间（如果获取不到拍照时间，则使用文件的创建时间）
     '''
     try:
@@ -88,22 +90,23 @@ def format_lat_lng(data):
     result=data_degree + data_minute + data_sec
     return result
 
-def getLocationBy_lat_lng(lat, lng):
+def get_location_by_lat_lng(lat, lng):
     """
     使用Geocoding API把经纬度坐标转换为结构化地址。需要注册baidu map api的key
     """
-    secret_key = 'XXXXX你得ak密钥'  # 请修改这里
+    secret_key = ''  # 请修改这里
     
     # 使用说明http://lbsyun.baidu.com/index.php?title=webapi/guide/webservice-geocoding-abroad
     baidu_map_api = 'http://api.map.baidu.com/reverse_geocoding/v3/?ak={0}&output=json&coordtype=wgs84ll&location={1},{2}'.format(
         secret_key, lat, lng)
+    print ("baidu_map_api:%s" % baidu_map_api)
     response = requests.get(baidu_map_api)
     content = response.text
     baidu_map_address = json.loads(content)
     formatted_address = baidu_map_address["result"]["formatted_address"]
     return formatted_address
 
-def getLocation(filename):
+def get_location(filename):
     '得到照片的拍照位置（如果获取不到，则为空字符串）'
     try:
         if os.path.isfile(filename):
@@ -121,8 +124,9 @@ def getLocation(filename):
         try:
             lat= format_lat_lng(data['GPS GPSLatitude'])  # [34, 12, 9286743/200000] -> xx.xxxxx
             lng= format_lat_lng(data['GPS GPSLongitude']) # [108, 57, 56019287/1000000] -> xx.xxxx
-            locationStr= getLocationBy_lat_lng(lat, lng)
-        except:
+            locationStr= get_location_by_lat_lng(lat, lng)
+        except Exception as e:
+            print("exception:%s" % (e))
             pass
         
     return locationStr
@@ -156,20 +160,22 @@ def add_watermark(filename, text):
     '为照片文件添加水印，filename是照片文件名，text是水印时间和位置'
     # 创建输出文件夹
     outdir= 'watermark/'
-    mymkdir(outdir) 
+    my_mkdir(outdir) 
 
     # 创建绘画对象
     image= Image.open(filename)
     image= orientate(image) # 将图片转正
     draw= ImageDraw.Draw(image)
     width, height= image.size # 宽度，高度
-    size= int(0.04*width)  # 字体大小(可以调整0.04)
-    myfont= ImageFont.truetype('/Library/Fonts/Arial Unicode.ttf', size=size) # 80, 4032*3024
+    size= int(0.015*width)  # 字体大小(可以调整0.04)
+    my_dir = sys.path[0]
+    ttf_dir = "%s/fonts/%s" % (my_dir, "DSEG14-Modern/DSEG14Modern-Italic.ttf");
+    myfont= ImageFont.truetype(ttf_dir, size=size) # 80, 4032*3024
     #fillcolor= '#000000' # RGB黑色
-    fillcolor= '#fbfafe'
+    fillcolor= '#ff9515'
 
     # 参数一：位置（x轴，y轴）；参数二：填写内容；参数三：字体；参数四：颜色    
-    d_width, d_height=0.5*width, 0.92*height # 字体的相对位置（0.5, 0.92可以根据图片调整）
+    d_width, d_height = 0.70 * width, 0.92 * height # 字体的相对位置（0.8, 0.92可以根据图片调整）
     draw.text((d_width, d_height), text, font=myfont, fill=fillcolor) # (-1200, -320)
 
     new_filename= get_new_filename(filename)
@@ -181,12 +187,12 @@ def scandir(startdir):
     os.chdir(startdir) # 改变当前工作目录
     for obj in os.listdir(os.curdir) :
         if os.path.isfile(obj):
-            if isTargetedFileType(obj): # 对满足过滤条件的文件，加时间和地点水印
-                photoTime = getPhotoTime(obj) # 获得照片的拍摄时间,当作水印的内容
-                location= getLocation(obj) # 获得照片的拍摄位置,当作水印的内容
+            if is_targeted_file_type(obj): # 对满足过滤条件的文件，加时间和地点水印
+                photoTime = get_photo_time(obj) # 获得照片的拍摄时间,当作水印的内容
+#location= getLocation(obj) # 获得照片的拍摄位置,当作水印的内容
 
-                print("%s    %s" % (obj, photoTime+' '+location))
-                add_watermark(obj, location +'\n'+ photoTime) #加时间和地点水印
+                print("%s %s" % (obj, photoTime))
+                add_watermark(obj, photoTime) #加时间和地点水印
 
 
 if __name__ == "__main__":
